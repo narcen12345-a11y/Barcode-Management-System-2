@@ -1,0 +1,36 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: barcode-postgres
+    environment:
+      POSTGRES_DB: barcode_management
+      POSTGRES_USER: barcode_user
+      POSTGRES_PASSWORD: barcode_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  backend:
+    image: php:8.2-cli
+    container_name: barcode-backend
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      - postgres
+    command: php -S 0.0.0.0:8000 -t public
+
+  frontend:
+    image: node:20-alpine
+    container_name: barcode-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  postgres-data:

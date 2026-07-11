@@ -1,0 +1,35 @@
+# Laravel / Backend
+/backend/vendor/
+/backend/node_modules/
+/backend/.env
+/backend/storage/
+/backend/storage/*.key
+/backend/bootstrap/cache/
+/backend/.phpunit.result.cache
+/backend/.php_cs.cache
+/backend/Homestead.yaml
+/backend/Homestead.json
+/backend/.vagrant/
+
+# Frontend / React / Vite
+/frontend/node_modules/
+/frontend/dist/
+/frontend/build/
+/frontend/.vite/
+
+# IDE
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/backend/storage/logs/
+
+# OS
+.DS_Store
+Thumbs.db

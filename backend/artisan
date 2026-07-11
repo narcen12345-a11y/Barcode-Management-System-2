@@ -1,0 +1,6 @@
+#!/usr/bin/env php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+echo "Install Laravel dependencies to run the application.\n";
