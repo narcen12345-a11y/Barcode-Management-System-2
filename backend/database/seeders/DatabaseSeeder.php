@@ -8,6 +8,15 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // Seeders can be added here later.
+        $this->call([
+            PermissionSeeder::class,
+            RoleSeeder::class,
+            UserSeeder::class,
+            SiteSeeder::class,
+            MaterialTypeSeeder::class,
+            MaterialModelSeeder::class,
+            MaterialSeeder::class,
+            BarcodeSeeder::class,
+        ]);
     }
 }

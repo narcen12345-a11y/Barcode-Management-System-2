@@ -1,8 +1,13 @@
 version: "3.9"
+
 services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL Database
+  # ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: barcode-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: barcode_management
       POSTGRES_USER: barcode_user
@@ -11,26 +16,64 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - barcode-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U barcode_user -d barcode_management"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+  # ──────────────────────────────────────────────
+  # Laravel Backend (PHP-FPM + Nginx)
+  # ──────────────────────────────────────────────
   backend:
     image: php:8.2-cli
     container_name: barcode-backend
+    restart: unless-stopped
     working_dir: /var/www/html
     volumes:
       - ./backend:/var/www/html
     depends_on:
-      - postgres
-    command: php -S 0.0.0.0:8000 -t public
+      postgres:
+        condition: service_healthy
+    networks:
+      - barcode-network
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: barcode_management
+      DB_USERNAME: barcode_user
+      DB_PASSWORD: barcode_password
 
+  # ──────────────────────────────────────────────
+  # React Frontend (Vite Dev Server)
+  # ──────────────────────────────────────────────
   frontend:
     image: node:20-alpine
     container_name: barcode-frontend
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./frontend:/app
     ports:
       - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - barcode-network
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
 
 volumes:
   postgres-data:
+    driver: local
+
+networks:
+  barcode-network:
+    driver: bridge
