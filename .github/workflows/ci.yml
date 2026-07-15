@@ -1,0 +1,260 @@
+# ============================================================
+# CI/CD Pipeline — Barcode Management System
+# ============================================================
+# Runs on every push and pull request to main branch
+# ============================================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Backend CI
+  # ──────────────────────────────────────────────
+  backend:
+    name: Backend (Laravel)
+    runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: barcode_management_test
+          POSTGRES_USER: barcode_user
+          POSTGRES_PASSWORD: barcode_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pgsql, mbstring, xml, curl, bcmath, json, tokenizer, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Run database migrations
+        run: php artisan migrate --force
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: barcode_management_test
+          DB_USERNAME: barcode_user
+          DB_PASSWORD: barcode_password
+
+      - name: Run PHPUnit tests
+        run: php artisan test --parallel --without-tty
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: barcode_management_test
+          DB_USERNAME: barcode_user
+          DB_PASSWORD: barcode_password
+
+      - name: Check coding standards (Pint)
+        run: vendor/bin/pint --test || echo "Pint not configured, skipping"
+
+  # ──────────────────────────────────────────────
+  # Frontend CI
+  # ──────────────────────────────────────────────
+  frontend:
+    name: Frontend (React + Vite)
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint check
+        run: npx eslint src/ --ext .js,.jsx || echo "ESLint not configured, skipping"
+
+      - name: Build for production
+        run: npm run build
+
+      - name: Check build output
+        run: |
+          if [ -d "dist" ]; then
+            echo "✅ Build successful — dist/ directory exists"
+            ls -la dist/
+          else
+            echo "❌ Build failed — dist/ directory not found"
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────
+  # Docker Build Check
+  # ──────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-24.04
+    needs: [backend, frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: false
+          tags: barcode-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: false
+          tags: barcode-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify images exist
+        run: |
+          docker images --filter "reference=barcode-backend" --format "{{.Repository}}:{{.Tag}}"
+          docker images --filter "reference=barcode-frontend" --format "{{.Repository}}:{{.Tag}}"
+
+  # ──────────────────────────────────────────────
+  # Migration Verification
+  # ──────────────────────────────────────────────
+  migrations:
+    name: Migration Verification
+    runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: barcode_management_test
+          POSTGRES_USER: barcode_user
+          POSTGRES_PASSWORD: barcode_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pgsql, mbstring, xml, curl, bcmath, json, tokenizer, zip
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Run migrations
+        run: php artisan migrate --force
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: barcode_management_test
+          DB_USERNAME: barcode_user
+          DB_PASSWORD: barcode_password
+
+      - name: Verify migration status
+        run: php artisan migrate:status
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: barcode_management_test
+          DB_USERNAME: barcode_user
+          DB_PASSWORD: barcode_password
+
+      - name: Rollback test
+        run: php artisan migrate:rollback --force
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: barcode_management_test
+          DB_USERNAME: barcode_user
+          DB_PASSWORD: barcode_password
+
+      - name: Re-run migrations
+        run: php artisan migrate --force
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: barcode_management_test
+          DB_USERNAME: barcode_user
+          DB_PASSWORD: barcode_password

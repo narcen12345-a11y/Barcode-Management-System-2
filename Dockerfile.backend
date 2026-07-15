@@ -1,0 +1,103 @@
+# ============================================================
+# Dockerfile.backend — Barcode Management System (PHP-FPM)
+# ============================================================
+# Multi-stage build for production-ready Laravel backend
+# ============================================================
+
+# ---- Stage 1: Dependencies ----
+FROM php:8.2-fpm-alpine AS vendor
+
+RUN set -eux; \
+    apk add --no-cache \
+        postgresql-dev \
+        libzip-dev \
+        zip \
+        unzip \
+        git \
+        curl \
+        oniguruma-dev \
+    ; \
+    docker-php-ext-install -j$(nproc) \
+        pdo_pgsql \
+        pgsql \
+        mbstring \
+        zip \
+        bcmath \
+        opcache \
+    ; \
+    docker-php-ext-enable opcache
+
+# Install Composer
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+
+# Copy only dependency files first for layer caching
+COPY backend/composer.json backend/composer.lock* /app/
+
+# Install production dependencies only
+RUN set -eux; \
+    composer install \
+        --no-dev \
+        --no-interaction \
+        --no-progress \
+        --no-suggest \
+        --optimize-autoloader \
+        --prefer-dist \
+    ; \
+    composer clear-cache
+
+# ---- Stage 2: Application ----
+FROM php:8.2-fpm-alpine AS app
+
+RUN set -eux; \
+    apk add --no-cache \
+        postgresql-dev \
+        libzip-dev \
+        zip \
+        unzip \
+        curl \
+        oniguruma-dev \
+    ; \
+    docker-php-ext-install -j$(nproc) \
+        pdo_pgsql \
+        pgsql \
+        mbstring \
+        zip \
+        bcmath \
+        opcache \
+    ; \
+    docker-php-ext-enable opcache
+
+# Copy OPcache configuration
+COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/php/php.ini /usr/local/etc/php/conf.d/app.ini
+
+WORKDIR /var/www/html
+
+# Copy vendor from stage 1
+COPY --from=vendor /app/vendor /var/www/html/vendor
+
+# Copy application files
+COPY backend/ /var/www/html/
+
+# Create storage structure and set permissions
+RUN set -eux; \
+    mkdir -p storage/framework/cache/data \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache \
+    ; \
+    chmod -R 775 storage bootstrap/cache; \
+    chown -R www-data:www-data storage bootstrap/cache
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:9000/ping || exit 1
+
+USER www-data
+
+EXPOSE 9000
+
+CMD ["php-fpm"]

@@ -1,4 +1,28 @@
+# ============================================================
+# Docker Compose — Barcode Management System (Production)
+# ============================================================
+# Services: Nginx (backend) + PHP-FPM + PostgreSQL + Nginx (frontend)
+# ============================================================
+
 version: "3.9"
+
+x-common: &common-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: "${APP_KEY}"
+  APP_URL: "${APP_URL:-http://localhost}"
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: "${DB_DATABASE:-barcode_management}"
+  DB_USERNAME: "${DB_USERNAME:-barcode_user}"
+  DB_PASSWORD: "${DB_PASSWORD:-barcode_password}"
+  CACHE_DRIVER: "${CACHE_DRIVER:-file}"
+  QUEUE_CONNECTION: "${QUEUE_CONNECTION:-sync}"
+  SESSION_DRIVER: "${SESSION_DRIVER:-file}"
+  LOG_CHANNEL: stack
+  LOG_LEVEL: error
+  SANCTUM_STATEFUL_DOMAINS: "${SANCTUM_STATEFUL_DOMAINS:-localhost,127.0.0.1}"
 
 services:
   # ──────────────────────────────────────────────
@@ -9,69 +33,100 @@ services:
     container_name: barcode-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: barcode_management
-      POSTGRES_USER: barcode_user
-      POSTGRES_PASSWORD: barcode_password
+      POSTGRES_DB: "${DB_DATABASE:-barcode_management}"
+      POSTGRES_USER: "${DB_USERNAME:-barcode_user}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-barcode_password}"
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - barcode-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U barcode_user -d barcode_management"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-barcode_user} -d ${DB_DATABASE:-barcode_management}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
 
   # ──────────────────────────────────────────────
-  # Laravel Backend (PHP-FPM + Nginx)
+  # PHP-FPM Backend
   # ──────────────────────────────────────────────
   backend:
-    image: php:8.2-cli
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
     container_name: barcode-backend
     restart: unless-stopped
-    working_dir: /var/www/html
+    environment:
+      <<: *common-env
+    env_file:
+      - path: ./backend/.env
+        required: false
     volumes:
-      - ./backend:/var/www/html
+      - backend-storage:/var/www/html/storage
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - barcode-network
-    command: php artisan serve --host=0.0.0.0 --port=8000
-    ports:
-      - "8000:8000"
-    environment:
-      APP_ENV: production
-      APP_DEBUG: "false"
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: barcode_management
-      DB_USERNAME: barcode_user
-      DB_PASSWORD: barcode_password
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/ping"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
   # ──────────────────────────────────────────────
-  # React Frontend (Vite Dev Server)
+  # Nginx — Backend API Gateway
   # ──────────────────────────────────────────────
-  frontend:
-    image: node:20-alpine
-    container_name: barcode-frontend
+  nginx-backend:
+    image: nginx:1.25-alpine
+    container_name: barcode-nginx-backend
     restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
     ports:
-      - "5173:5173"
+      - "8000:80"
+    volumes:
+      - ./docker/nginx/backend.conf:/etc/nginx/conf.d/default.conf:ro
+      - backend-storage:/var/www/html/storage:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     networks:
       - barcode-network
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # ──────────────────────────────────────────────
+  # Nginx — Frontend SPA
+  # ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: barcode-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - nginx-backend
+    networks:
+      - barcode-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   postgres-data:
+    driver: local
+  backend-storage:
     driver: local
 
 networks:

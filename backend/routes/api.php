@@ -19,7 +19,63 @@ use Illuminate\Support\Facades\Route;
 
 // Health Check
 Route::get('/health', function () {
-    return response()->json(['status' => 'ok']);
+    $status = 'ok';
+    $database = 'ok';
+    $cache = 'ok';
+    $queue = 'ok';
+    $storage = 'ok';
+
+    // Check database connection
+    try {
+        DB::connection()->getPdo();
+    } catch (\Exception $e) {
+        $database = 'error: ' . $e->getMessage();
+        $status = 'degraded';
+    }
+
+    // Check cache
+    try {
+        Cache::store(config('cache.default'))->get('health-check-key');
+    } catch (\Exception $e) {
+        $cache = 'error: ' . $e->getMessage();
+        $status = 'degraded';
+    }
+
+    // Check queue
+    try {
+        $queueConnection = config('queue.default');
+        if ($queueConnection === 'sync') {
+            $queue = 'ok (sync)';
+        } else {
+            Queue::size();
+        }
+    } catch (\Exception $e) {
+        $queue = 'error: ' . $e->getMessage();
+        $status = 'degraded';
+    }
+
+    // Check storage
+    try {
+        $storagePath = storage_path();
+        if (!is_dir($storagePath) || !is_writable($storagePath)) {
+            $storage = 'error: storage not writable';
+            $status = 'degraded';
+        }
+    } catch (\Exception $e) {
+        $storage = 'error: ' . $e->getMessage();
+        $status = 'degraded';
+    }
+
+    $httpStatus = $status === 'ok' ? 200 : 503;
+
+    return response()->json([
+        'status' => $status,
+        'database' => $database,
+        'cache' => $cache,
+        'queue' => $queue,
+        'storage' => $storage,
+        'timestamp' => now()->toIso8601String(),
+    ], $httpStatus);
 });
 
 // Authentication (Public) — with rate limiting: 5 attempts per minute
