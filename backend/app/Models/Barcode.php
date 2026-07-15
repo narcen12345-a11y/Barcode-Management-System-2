@@ -27,6 +27,7 @@ class Barcode extends Model
     {
         return [
             'is_active' => 'boolean',
+            'status' => BarcodeStatusEnum::class,
         ];
     }
 

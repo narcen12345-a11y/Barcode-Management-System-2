@@ -27,7 +27,7 @@ class AuthenticationService
         }
 
         if (!$user->canLogin()) {
-            $message = match ($user->status) {
+            $message = match ($user->status->value) {
                 'pending_verification' => 'Akun Anda belum diverifikasi oleh Administrator.',
                 'inactive' => 'Akun Anda sedang dinonaktifkan.',
                 'suspended' => 'Akun Anda sedang ditangguhkan.',
