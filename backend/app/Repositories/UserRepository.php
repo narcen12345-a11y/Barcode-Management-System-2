@@ -11,7 +11,7 @@ class UserRepository implements UserRepositoryInterface
 {
     public function findById(int $id): ?User
     {
-        return User::find($id);
+        return User::with('roles')->find($id);
     }
 
     public function findByUsername(string $username): ?User
@@ -33,7 +33,7 @@ class UserRepository implements UserRepositoryInterface
 
     public function findAllPaginated(array $filters = [], int $perPage = 10): LengthAwarePaginator
     {
-        $query = User::query();
+        $query = User::with('roles');
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];

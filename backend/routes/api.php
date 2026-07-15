@@ -22,8 +22,8 @@ Route::get('/health', function () {
     return response()->json(['status' => 'ok']);
 });
 
-// Authentication (Public)
-Route::post('/login', [AuthController::class, 'login']);
+// Authentication (Public) — with rate limiting: 5 attempts per minute
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
 // Authenticated Routes
 Route::middleware('auth:sanctum')->group(function () {

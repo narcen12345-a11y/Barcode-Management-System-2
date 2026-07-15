@@ -70,9 +70,11 @@ class BarcodeController extends Controller
             ], 404);
         }
 
+        $barcode->load('histories.changedBy');
+
         return response()->json([
             'success' => true,
-            'data' => new BarcodeDetailResource($barcode->load('histories.changedBy')),
+            'data' => new BarcodeDetailResource($barcode),
         ]);
     }
 
@@ -87,9 +89,11 @@ class BarcodeController extends Controller
             ], 404);
         }
 
+        $barcode->load('histories.changedBy');
+
         return response()->json([
             'success' => true,
-            'data' => new BarcodeDetailResource($barcode->load('histories.changedBy')),
+            'data' => new BarcodeDetailResource($barcode),
         ]);
     }
 

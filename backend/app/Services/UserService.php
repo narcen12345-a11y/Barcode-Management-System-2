@@ -285,7 +285,7 @@ class UserService
 
             $this->ensureNotSuperAdmin($user);
 
-            $newPassword = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, 12);
+            $newPassword = bin2hex(random_bytes(6)); // 12-character hex string, cryptographically secure
             $user->setPassword($newPassword);
 
             // Audit Log: Reset Password

@@ -11,7 +11,7 @@ class RoleRepository implements RoleRepositoryInterface
 {
     public function findById(int $id): ?Role
     {
-        return Role::find($id);
+        return Role::with('permissions')->find($id);
     }
 
     public function findByName(string $name): ?Role
@@ -21,7 +21,7 @@ class RoleRepository implements RoleRepositoryInterface
 
     public function findAllPaginated(array $filters = [], int $perPage = 10): LengthAwarePaginator
     {
-        $query = Role::query();
+        $query = Role::with('permissions');
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];

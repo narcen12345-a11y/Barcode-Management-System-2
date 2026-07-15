@@ -138,14 +138,11 @@ class UserController extends Controller
 
     public function resetPassword(int $id): JsonResponse
     {
-        $newPassword = $this->userService->resetPassword($id);
+        $this->userService->resetPassword($id);
 
         return response()->json([
             'success' => true,
-            'message' => 'Password berhasil di-reset.',
-            'data' => [
-                'new_password' => $newPassword,
-            ],
+            'message' => 'Password berhasil di-reset. Password baru telah dikirimkan ke pengguna.',
         ]);
     }
 }

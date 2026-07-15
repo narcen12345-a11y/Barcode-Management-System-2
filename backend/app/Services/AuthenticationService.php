@@ -119,7 +119,6 @@ class AuthenticationService
         }
 
         DB::transaction(function () use ($user, $dto) {
-            $oldPasswordHash = $user->password;
             $user->setPassword($dto->newPassword);
 
             // Audit Log: Perubahan Password
